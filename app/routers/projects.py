@@ -4,7 +4,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.module import Module
 from app.models.project import Project
+from app.models.test_case import TestCase
 from app.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
 
 router = APIRouter(
@@ -23,7 +25,6 @@ def create_project(
     project_in: ProjectCreate,
     db: Session = Depends(get_db),
 ) -> ProjectResponse:
-    # Check for existing project name to provide immediate 409
     existing = db.query(Project).filter(Project.name == project_in.name).first()
     if existing:
         raise HTTPException(
@@ -145,6 +146,27 @@ def delete_project(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Project with ID {project_id} not found",
+        )
+
+    # Protect project data: do not allow deletion if modules or test cases exist
+    module_count = db.query(Module).filter(Module.project_id == project_id).count()
+    if module_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Cannot delete project with ID {project_id} because it contains "
+                f"{module_count} associated module(s). Delete or reassign them first."
+            ),
+        )
+
+    test_case_count = db.query(TestCase).filter(TestCase.project_id == project_id).count()
+    if test_case_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Cannot delete project with ID {project_id} because it contains "
+                f"{test_case_count} associated test case(s). Delete or reassign them first."
+            ),
         )
 
     db.delete(project)

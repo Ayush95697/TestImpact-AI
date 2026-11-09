@@ -1,9 +1,13 @@
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional, TYPE_CHECKING
 from sqlalchemy import DateTime, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.module import Module
+    from app.models.test_case import TestCase
 
 
 class Project(Base):
@@ -16,4 +20,13 @@ class Project(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
+    )
+
+    modules: Mapped[List["Module"]] = relationship(
+        "Module",
+        back_populates="project",
+    )
+    test_cases: Mapped[List["TestCase"]] = relationship(
+        "TestCase",
+        back_populates="project",
     )
