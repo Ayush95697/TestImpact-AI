@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.project import Project
 from app.rag.embeddings import (
+    CompanyEmbeddingError,
     CompanyEmbeddingNotConfiguredError,
     get_embedding_model,
 )
@@ -34,7 +35,7 @@ def index_project_endpoint(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
                 "RAG indexing is unavailable: Company embedding API is not yet configured. "
-                "Awaiting approved company embedding API credentials and specification. "
+                "Awaiting approved company embedding API credentials, endpoint URL, and dimensions. "
                 "Refer to docs/COMPANY_EMBEDDING_API_REQUIREMENTS.md for setup requirements."
             ),
         )
@@ -54,6 +55,11 @@ def index_project_endpoint(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),
+        )
+    except CompanyEmbeddingError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Embedding provider error: {str(e)}",
         )
     except Exception as e:
         raise HTTPException(
@@ -79,7 +85,7 @@ def search_knowledge_base_endpoint(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
                 "RAG search is unavailable: Company embedding API is not yet configured. "
-                "Awaiting approved company embedding API credentials and specification. "
+                "Awaiting approved company embedding API credentials, endpoint URL, and dimensions. "
                 "Refer to docs/COMPANY_EMBEDDING_API_REQUIREMENTS.md for setup requirements."
             ),
         )
@@ -108,6 +114,11 @@ def search_knowledge_base_endpoint(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),
+        )
+    except CompanyEmbeddingError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Embedding provider error: {str(e)}",
         )
     except Exception as e:
         raise HTTPException(
