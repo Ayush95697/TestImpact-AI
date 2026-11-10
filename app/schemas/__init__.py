@@ -6,6 +6,13 @@ from app.schemas.change_request import (
 from app.schemas.defect import DefectCreate, DefectResponse, DefectUpdate
 from app.schemas.module import ModuleCreate, ModuleResponse, ModuleUpdate
 from app.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
+from app.schemas.rag import (
+    IndexRequest,
+    IndexResponse,
+    SearchRequest,
+    SearchResponse,
+    SearchResult,
+)
 from app.schemas.test_case import TestCaseCreate, TestCaseResponse, TestCaseUpdate
 from app.schemas.test_execution import TestExecutionCreate, TestExecutionResponse
 
@@ -27,4 +34,9 @@ __all__ = [
     "ChangeRequestCreate",
     "ChangeRequestUpdate",
     "ChangeRequestResponse",
+    "IndexRequest",
+    "IndexResponse",
+    "SearchRequest",
+    "SearchResponse",
+    "SearchResult",
 ]

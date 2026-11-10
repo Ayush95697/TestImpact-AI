@@ -7,3 +7,11 @@ __pycache__/
 # Database
 *.db
 
+# ChromaDB & Vector Store
+chroma_db/
+.chroma/
+
+# Model Weights and Hugging Face Caches
+.cache/
+hf_models/
+models/

@@ -18,6 +18,7 @@ from app.routers import (
     defects_router,
     modules_router,
     projects_router,
+    rag_router,
     test_cases_router,
     test_executions_router,
 )
@@ -38,6 +39,7 @@ app.include_router(test_cases_router)
 app.include_router(defects_router)
 app.include_router(test_executions_router)
 app.include_router(change_requests_router)
+app.include_router(rag_router)
 
 
 @app.get("/health", summary="Health Check")
