@@ -5,6 +5,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 if TYPE_CHECKING:
+    from app.models.change_request import ChangeRequest
+    from app.models.defect import Defect
     from app.models.project import Project
     from app.models.test_case import TestCase
 
@@ -31,4 +33,12 @@ class Module(Base):
         secondary="test_case_modules",
         back_populates="modules",
     )
-
+    defects: Mapped[List["Defect"]] = relationship(
+        "Defect",
+        back_populates="module",
+    )
+    change_requests: Mapped[List["ChangeRequest"]] = relationship(
+        "ChangeRequest",
+        secondary="change_request_modules",
+        back_populates="modules",
+    )

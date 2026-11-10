@@ -4,6 +4,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.change_request import ChangeRequest
+from app.models.defect import Defect
 from app.models.module import Module
 from app.models.project import Project
 from app.models.test_case import TestCase
@@ -148,7 +150,7 @@ def delete_project(
             detail=f"Project with ID {project_id} not found",
         )
 
-    # Protect project data: do not allow deletion if modules or test cases exist
+    # Protect project data: do not allow deletion if modules, test cases, defects, or change requests exist
     module_count = db.query(Module).filter(Module.project_id == project_id).count()
     if module_count > 0:
         raise HTTPException(
@@ -166,6 +168,26 @@ def delete_project(
             detail=(
                 f"Cannot delete project with ID {project_id} because it contains "
                 f"{test_case_count} associated test case(s). Delete or reassign them first."
+            ),
+        )
+
+    defect_count = db.query(Defect).filter(Defect.project_id == project_id).count()
+    if defect_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Cannot delete project with ID {project_id} because it contains "
+                f"{defect_count} associated defect(s). Delete or reassign them first."
+            ),
+        )
+
+    cr_count = db.query(ChangeRequest).filter(ChangeRequest.project_id == project_id).count()
+    if cr_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Cannot delete project with ID {project_id} because it contains "
+                f"{cr_count} associated change request(s). Delete or reassign them first."
             ),
         )
 

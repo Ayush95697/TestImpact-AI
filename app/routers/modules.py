@@ -22,7 +22,6 @@ def create_module_in_project(
     module_in: ModuleCreate,
     db: Session = Depends(get_db),
 ) -> ModuleResponse:
-    # 1. Validate project exists
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(
@@ -30,7 +29,6 @@ def create_module_in_project(
             detail=f"Project with ID {project_id} not found",
         )
 
-    # 2. Check for duplicate module name within project
     existing = (
         db.query(Module)
         .filter(Module.project_id == project_id, Module.name == module_in.name)
@@ -127,7 +125,6 @@ def update_module(
             detail="At least one field must be provided to update",
         )
 
-    # Check for duplicate name within the same project
     if "name" in update_data and update_data["name"] != module.name:
         existing = (
             db.query(Module)
@@ -176,15 +173,39 @@ def delete_module(
             detail=f"Module with ID {module_id} not found",
         )
 
-    # Check if module is associated with any test cases
+    # Check if module is associated with test cases
     if module.test_cases:
         tc_count = len(module.test_cases)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Cannot delete module with ID {module_id} because it is associated with {tc_count} test case(s). Unlink or reassign them first.",
+            detail=(
+                f"Cannot delete module with ID {module_id} because it is associated with "
+                f"{tc_count} test case(s). Unlink or reassign them first."
+            ),
+        )
+
+    # Check if module is associated with defects
+    if module.defects:
+        defect_count = len(module.defects)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Cannot delete module with ID {module_id} because it is associated with "
+                f"{defect_count} defect(s). Unlink or reassign them first."
+            ),
+        )
+
+    # Check if module is associated with change requests
+    if module.change_requests:
+        cr_count = len(module.change_requests)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Cannot delete module with ID {module_id} because it is associated with "
+                f"{cr_count} change request(s). Unlink or reassign them first."
+            ),
         )
 
     db.delete(module)
     db.commit()
     return None
-

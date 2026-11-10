@@ -181,7 +181,17 @@ def delete_test_case(
             detail=f"Test case with ID {test_case_id} not found",
         )
 
+    # Do not allow deletion if historical executions exist
+    if test_case.executions:
+        exec_count = len(test_case.executions)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Cannot delete test case with ID {test_case_id} because it has "
+                f"{exec_count} historical test execution record(s). Retaining execution history is required."
+            ),
+        )
+
     db.delete(test_case)
     db.commit()
     return None
-

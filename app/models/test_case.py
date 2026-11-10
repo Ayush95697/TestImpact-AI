@@ -7,6 +7,7 @@ from app.database import Base
 if TYPE_CHECKING:
     from app.models.module import Module
     from app.models.project import Project
+    from app.models.test_execution import TestExecution
 
 
 class TestCase(Base):
@@ -30,9 +31,12 @@ class TestCase(Base):
         secondary="test_case_modules",
         back_populates="test_cases",
     )
+    executions: Mapped[List["TestExecution"]] = relationship(
+        "TestExecution",
+        back_populates="test_case",
+    )
 
     @property
     def module_ids(self) -> List[int]:
         """Returns the list of associated module IDs."""
         return [m.id for m in self.modules]
-

@@ -2,9 +2,25 @@ from typing import Dict
 from fastapi import FastAPI
 
 from app.database import Base, engine
-# Import all models and associations so that metadata contains all tables
-from app.models import Module, Project, TestCase, test_case_modules  # noqa: F401
-from app.routers import modules_router, projects_router, test_cases_router
+# Import all models and associations so metadata registers all tables
+from app.models import (  # noqa: F401
+    ChangeRequest,
+    Defect,
+    Module,
+    Project,
+    TestCase,
+    TestExecution,
+    change_request_modules,
+    test_case_modules,
+)
+from app.routers import (
+    change_requests_router,
+    defects_router,
+    modules_router,
+    projects_router,
+    test_cases_router,
+    test_executions_router,
+)
 
 # Create database tables if they do not exist
 Base.metadata.create_all(bind=engine)
@@ -19,6 +35,9 @@ app = FastAPI(
 app.include_router(projects_router)
 app.include_router(modules_router)
 app.include_router(test_cases_router)
+app.include_router(defects_router)
+app.include_router(test_executions_router)
+app.include_router(change_requests_router)
 
 
 @app.get("/health", summary="Health Check")
