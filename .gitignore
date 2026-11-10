@@ -14,4 +14,4 @@ chroma_db/
 # Model Weights and Hugging Face Caches
 .cache/
 hf_models/
-models/
+/models/

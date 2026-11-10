@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 if TYPE_CHECKING:
+    from app.models.analysis_run import AnalysisRun
     from app.models.module import Module
     from app.models.project import Project
 
@@ -34,6 +35,10 @@ class ChangeRequest(Base):
         "Module",
         secondary="change_request_modules",
         back_populates="change_requests",
+    )
+    analysis_runs: Mapped[List["AnalysisRun"]] = relationship(
+        "AnalysisRun",
+        back_populates="change_request",
     )
 
     @property

@@ -1,3 +1,8 @@
+from app.schemas.analysis import (
+    AnalysisRequest,
+    AnalysisResponse,
+    AnalysisRunDetailResponse,
+)
 from app.schemas.change_request import (
     ChangeRequestCreate,
     ChangeRequestResponse,
@@ -12,6 +17,11 @@ from app.schemas.rag import (
     SearchRequest,
     SearchResponse,
     SearchResult,
+)
+from app.schemas.recommendation import (
+    RecommendationResponse,
+    RecommendationReviewRequest,
+    SupportingEvidence,
 )
 from app.schemas.test_case import TestCaseCreate, TestCaseResponse, TestCaseUpdate
 from app.schemas.test_execution import TestExecutionCreate, TestExecutionResponse
@@ -39,4 +49,10 @@ __all__ = [
     "SearchRequest",
     "SearchResponse",
     "SearchResult",
+    "AnalysisRequest",
+    "AnalysisResponse",
+    "AnalysisRunDetailResponse",
+    "SupportingEvidence",
+    "RecommendationResponse",
+    "RecommendationReviewRequest",
 ]

@@ -1,3 +1,4 @@
+from app.routers.analysis import router as analysis_router
 from app.routers.change_requests import router as change_requests_router
 from app.routers.defects import router as defects_router
 from app.routers.modules import router as modules_router
@@ -14,4 +15,5 @@ __all__ = [
     "test_executions_router",
     "change_requests_router",
     "rag_router",
+    "analysis_router",
 ]

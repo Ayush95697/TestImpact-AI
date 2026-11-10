@@ -4,16 +4,19 @@ from fastapi import FastAPI
 from app.database import Base, engine
 # Import all models and associations so metadata registers all tables
 from app.models import (  # noqa: F401
+    AnalysisRun,
     ChangeRequest,
     Defect,
     Module,
     Project,
+    Recommendation,
     TestCase,
     TestExecution,
     change_request_modules,
     test_case_modules,
 )
 from app.routers import (
+    analysis_router,
     change_requests_router,
     defects_router,
     modules_router,
@@ -40,6 +43,7 @@ app.include_router(defects_router)
 app.include_router(test_executions_router)
 app.include_router(change_requests_router)
 app.include_router(rag_router)
+app.include_router(analysis_router)
 
 
 @app.get("/health", summary="Health Check")
