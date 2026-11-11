@@ -1,4 +1,5 @@
 from typing import Dict
+
 from fastapi import FastAPI
 
 from app.database import Base, engine
