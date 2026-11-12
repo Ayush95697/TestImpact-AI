@@ -1,0 +1,105 @@
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+@import '@fontsource/manrope/600.css';
+@import '@fontsource/manrope/700.css';
+@import '@fontsource/manrope/800.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+@import '@fontsource/jetbrains-mono/600.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-app: 248 250 252;
+  --bg-sidebar: 23 37 84;
+  --bg-surface: 255 255 255;
+  --bg-surface-muted: 241 245 249;
+  --border-subtle: 226 232 240;
+  --border-strong: 203 213 225;
+  --text-primary: 15 23 42;
+  --text-secondary: 100 116 139;
+  --accent-primary: 79 70 229;
+  --accent-primary-hover: 67 56 202;
+  --accent-secondary: 13 148 136;
+  --status-success: 22 163 74;
+  --status-warning: 217 119 6;
+  --status-error: 220 38 38;
+  --chart-grid: #E2E8F0;
+  --chart-tick: #64748B;
+}
+
+.dark {
+  --bg-app: 11 17 32;
+  --bg-sidebar: 17 24 39;
+  --bg-surface: 23 32 51;
+  --bg-surface-muted: 30 41 59;
+  --border-subtle: 41 52 73;
+  --border-strong: 51 65 85;
+  --text-primary: 248 250 252;
+  --text-secondary: 148 163 184;
+  --accent-primary: 99 102 241;
+  --accent-primary-hover: 79 70 229;
+  --accent-secondary: 20 184 166;
+  --status-success: 34 197 94;
+  --status-warning: 245 158 11;
+  --status-error: 239 68 68;
+  --chart-grid: #293449;
+  --chart-tick: #94A3B8;
+}
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    background-color: rgb(var(--bg-app));
+    color: rgb(var(--text-primary));
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: 'Manrope', 'Inter', system-ui, sans-serif;
+    letter-spacing: -0.015em;
+  }
+
+  code,
+  pre,
+  kbd {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  }
+}
+
+@layer components {
+  .surface-card {
+    @apply bg-app-surface border border-app-border rounded-lg shadow-subtle;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-md bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white shadow-subtle transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-[#0B1120];
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-app-border-strong bg-app-surface px-3.5 py-2 text-sm font-medium text-app-text shadow-subtle transition-colors hover:bg-app-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-[#0B1120];
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-md bg-red-600 px-3.5 py-2 text-sm font-medium text-white shadow-subtle transition-colors hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-[#0B1120];
+  }
+
+  .input-field {
+    @apply w-full rounded-md border border-app-border-strong bg-app-surface px-3 py-2 text-sm text-app-text placeholder:text-app-text-secondary focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .input-field::placeholder {
+    opacity: 0.75;
+  }
+
+  .field-label {
+    @apply block text-xs font-semibold uppercase tracking-wide text-app-text-secondary mb-1.5;
+  }
+}
+

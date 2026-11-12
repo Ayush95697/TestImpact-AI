@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import json
 import os
 import unittest
@@ -10,6 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
+from app.llm.explanation_service import prepare_batch_explanation_contexts
 from app.main import app
 from app.models import (
     AnalysisExplanation,
@@ -558,6 +560,365 @@ class TestLLMExplanationsSuite(unittest.TestCase):
             dimensions=736,
         )
         self.assertTrue(emb.is_configured())
+
+    def _create_eight_rec_run(self):
+        """Seeds a completed analysis run with 8 ranked recommendations and varied evidence."""
+        test_cases = []
+        executions = []
+        for idx in range(1, 9):
+            tc = TestCase(
+                project_id=self.p_bank.id,
+                title=f"Banking Regression TC-{idx}",
+                steps=f"1. Step A for TC-{idx}\n2. Step B for TC-{idx}",
+                expected_result=f"Expected outcome {idx}",
+                priority="High" if idx <= 3 else ("Medium" if idx <= 6 else "Low"),
+                modules=[self.m_auth] if idx <= 6 else [self.m_transfer],
+            )
+            self.db.add(tc)
+            test_cases.append(tc)
+        self.db.flush()
+
+        for idx, tc in enumerate(test_cases[:3], start=1):
+            ex = TestExecution(
+                test_case_id=tc.id,
+                status="failed",
+                build_version=f"banking-v2.{idx}",
+            )
+            self.db.add(ex)
+            executions.append(ex)
+        self.db.flush()
+
+        run = AnalysisRun(
+            change_request_id=self.cr_bank.id,
+            status="completed",
+            completed_at=datetime.now(timezone.utc),
+        )
+        self.db.add(run)
+        self.db.flush()
+
+        recs = []
+        review_cycle = ["accepted", "rejected", "pending"]
+        for rank in range(1, 9):
+            tc = test_cases[rank - 1]
+            if rank <= 3:
+                score, level = 100.0 - (rank - 1) * 10.0, "High"
+                evidence = [
+                    {
+                        "source_type": "module",
+                        "source_id": self.m_auth.id,
+                        "title": f"Affected Module: {self.m_auth.name}",
+                    },
+                    {
+                        "source_type": "test_case",
+                        "source_id": tc.id,
+                        "title": tc.title,
+                    },
+                    {
+                        "source_type": "defect",
+                        "source_id": self.defect_auth.id,
+                        "title": self.defect_auth.title,
+                    },
+                    {
+                        "source_type": "test_execution",
+                        "source_id": executions[rank - 1].id,
+                        "title": f"Execution (failed) - {tc.title}",
+                    },
+                ]
+            elif rank <= 6:
+                score, level = 40.0, "Medium"
+                evidence = [
+                    {
+                        "source_type": "module",
+                        "source_id": self.m_auth.id,
+                        "title": f"Affected Module: {self.m_auth.name}",
+                    }
+                ]
+            else:
+                score, level = 20.0, "Low"
+                evidence = [
+                    {
+                        "source_type": "defect",
+                        "source_id": self.defect_auth.id,
+                        "title": self.defect_auth.title,
+                    }
+                ]
+
+            rec = Recommendation(
+                analysis_run_id=run.id,
+                test_case_id=tc.id,
+                rank=rank,
+                score=score,
+                impact_level=level,
+                reason=f"Deterministic reason for rank {rank}",
+                score_breakdown={"module_match": 40.0 if rank <= 6 else 0.0},
+                supporting_evidence=evidence,
+                review_status=review_cycle[(rank - 1) % 3],
+            )
+            self.db.add(rec)
+            recs.append(rec)
+
+        self.db.commit()
+        for rec in recs:
+            self.db.refresh(rec)
+        return run, recs
+
+    def _build_batch_response(self, batch_recs, summary="Batch summary", reverse_items=False):
+        items = list(reversed(batch_recs)) if reverse_items else list(batch_recs)
+        rec_payloads = []
+        for rec in items:
+            first_ev = rec.supporting_evidence[0]
+            rec_payloads.append(
+                {
+                    "recommendation_id": rec.id,
+                    "test_case_id": rec.test_case_id,
+                    "explanation": f"Grounded explanation for recommendation {rec.id} (TC {rec.test_case_id}).",
+                    "evidence_refs": [
+                        {
+                            "source_type": first_ev["source_type"],
+                            "source_id": first_ev["source_id"],
+                        }
+                    ],
+                }
+            )
+        payload = {
+            "overall_summary": summary,
+            "risk_observations": [
+                f"Historical risk noted for batch {[r.id for r in batch_recs]}."
+            ],
+            "recommendations": rec_payloads,
+            "limitations": [
+                "The analysis does not inspect actual source-code changes."
+            ],
+        }
+        mock_resp = MagicMock(status_code=200)
+        mock_resp.json.return_value = {
+            "choices": [{"finish_reason": "stop", "message": {"content": json.dumps(payload)}}],
+            "usage": {"input_tokens": 900, "output_tokens": 320},
+        }
+        return mock_resp
+
+    # Step 9 #1, #2, #3, #13, #14, #15: Eight recommendations across batches, configurable batch size, ordering, scores & reviews intact
+    @patch("requests.post")
+    def test_10_eight_recommendations_batched_preserving_order_scores_and_reviews(self, mock_post):
+        run, recs = self._create_eight_rec_run()
+        before_run = self.client.get(f"/analysis-runs/{run.id}").json()
+
+        # batch_size=3 -> [3, 3, 2]; intentionally reverse items in Batch 2 to verify rank restoration
+        mock_post.side_effect = [
+            self._build_batch_response(recs[0:3], summary="Batch 1 high priority tests."),
+            self._build_batch_response(recs[3:6], summary="Batch 2 medium priority tests.", reverse_items=True),
+            self._build_batch_response(recs[6:8], summary="Batch 3 defect-linked tests."),
+        ]
+
+        with patch.dict(os.environ, {**self.llm_env, "COMPANY_LLM_BATCH_SIZE": "3"}, clear=False):
+            resp = self.client.post(f"/analysis-runs/{run.id}/explain")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(mock_post.call_count, 3)
+
+        # Verify each batch prompt only included its own batch recommendations
+        prompt_b1 = mock_post.call_args_list[0].kwargs["json"]["messages"][0]["content"]
+        prompt_b2 = mock_post.call_args_list[1].kwargs["json"]["messages"][0]["content"]
+        prompt_b3 = mock_post.call_args_list[2].kwargs["json"]["messages"][0]["content"]
+
+        self.assertIn(f'"recommendation_id":{recs[0].id}', prompt_b1)
+        self.assertNotIn(f'"recommendation_id":{recs[4].id}', prompt_b1)
+        self.assertIn(f'"recommendation_id":{recs[4].id}', prompt_b2)
+        self.assertNotIn(f'"recommendation_id":{recs[0].id}', prompt_b2)
+        self.assertIn(f'"recommendation_id":{recs[7].id}', prompt_b3)
+        self.assertNotIn(f'"recommendation_id":{recs[0].id}', prompt_b3)
+        for p in (prompt_b1, prompt_b2, prompt_b3):
+            self.assertNotIn(self.llm_env["COMPANY_LLM_API_KEY"], p)
+            self.assertIn(self.cr_bank.title, p)
+
+        data = resp.json()
+        returned_ids = [item["recommendation_id"] for item in data["recommendations"]]
+        expected_ids = [rec.id for rec in recs]
+        self.assertEqual(len(returned_ids), 8)
+        self.assertEqual(returned_ids, expected_ids)
+        self.assertEqual(len(set(returned_ids)), 8)
+
+        # Verify scores, ranks, impact levels, evidence, and mixed QA review statuses unchanged
+        after_run = self.client.get(f"/analysis-runs/{run.id}").json()
+        self.assertEqual(before_run, after_run)
+
+        # Verify GET retrieves full 8-item explanation without new LLM calls
+        mock_post.reset_mock()
+        get_resp = self.client.get(f"/analysis-runs/{run.id}/explanation")
+        self.assertEqual(get_resp.status_code, 200)
+        self.assertEqual([r["recommendation_id"] for r in get_resp.json()["recommendations"]], expected_ids)
+        mock_post.assert_not_called()
+
+        # Regenerate with configurable COMPANY_LLM_BATCH_SIZE=2 (4 batches of 2) and verify single persisted record updated
+        mock_post.side_effect = [
+            self._build_batch_response(recs[0:2], summary="Regen batch 1."),
+            self._build_batch_response(recs[2:4], summary="Regen batch 2."),
+            self._build_batch_response(recs[4:6], summary="Regen batch 3."),
+            self._build_batch_response(recs[6:8], summary="Regen batch 4."),
+        ]
+        with patch.dict(os.environ, {**self.llm_env, "COMPANY_LLM_BATCH_SIZE": "2"}, clear=False):
+            regen_resp = self.client.post(f"/analysis-runs/{run.id}/explain")
+        self.assertEqual(regen_resp.status_code, 200)
+        self.assertEqual(mock_post.call_count, 4)
+        self.assertIn("Regen batch 1.", regen_resp.json()["overall_summary"])
+        self.assertEqual(
+            [r["recommendation_id"] for r in regen_resp.json()["recommendations"]],
+            expected_ids,
+        )
+        rows = (
+            self.db.query(AnalysisExplanation)
+            .filter(AnalysisExplanation.analysis_run_id == run.id)
+            .all()
+        )
+        self.assertEqual(len(rows), 1)
+
+    # Step 9 #6, #11, #13: Mid-batch failure does not persist partial explanation & preserves prior explanation / run
+    @patch("requests.post")
+    def test_11_batch_failure_prevents_partial_persistence_and_cross_batch_ids(self, mock_post):
+        run, recs = self._create_eight_rec_run()
+        before_run = self.client.get(f"/analysis-runs/{run.id}").json()
+
+        # Batch 1 succeeds, Batch 2 fails with HTTP 500
+        mock_500 = MagicMock(status_code=500)
+        mock_500.raise_for_status.side_effect = requests.exceptions.HTTPError(response=mock_500)
+        mock_post.side_effect = [
+            self._build_batch_response(recs[0:3], summary="Batch 1 ok"),
+            mock_500,
+        ]
+        with patch.dict(os.environ, {**self.llm_env, "COMPANY_LLM_BATCH_SIZE": "3"}, clear=False):
+            fail_resp = self.client.post(f"/analysis-runs/{run.id}/explain")
+
+        self.assertEqual(fail_resp.status_code, 502)
+        self.assertEqual(self.client.get(f"/analysis-runs/{run.id}/explanation").status_code, 404)
+        self.assertEqual(self.client.get(f"/analysis-runs/{run.id}").json(), before_run)
+
+        # Cross-batch ID injection: Batch 2 returns an ID from Batch 1 instead of its own ID
+        bad_batch_2 = self._build_batch_response([recs[0], recs[4], recs[5]], summary="Injected wrong batch ID")
+        mock_post.side_effect = [
+            self._build_batch_response(recs[0:3], summary="Batch 1 ok"),
+            bad_batch_2,
+        ]
+        with patch.dict(os.environ, {**self.llm_env, "COMPANY_LLM_BATCH_SIZE": "3"}, clear=False):
+            bad_id_resp = self.client.post(f"/analysis-runs/{run.id}/explain")
+
+        self.assertEqual(bad_id_resp.status_code, 502)
+        self.assertIn("unknown recommendation_id", bad_id_resp.json()["detail"].lower())
+        self.assertEqual(self.client.get(f"/analysis-runs/{run.id}/explanation").status_code, 404)
+
+        # Persist a complete 8-rec explanation, then verify mid-batch failure during regeneration keeps prior explanation intact
+        mock_post.side_effect = [
+            self._build_batch_response(recs[0:3], summary="Baseline batch 1"),
+            self._build_batch_response(recs[3:6], summary="Baseline batch 2"),
+            self._build_batch_response(recs[6:8], summary="Baseline batch 3"),
+        ]
+        with patch.dict(os.environ, {**self.llm_env, "COMPANY_LLM_BATCH_SIZE": "3"}, clear=False):
+            ok_resp = self.client.post(f"/analysis-runs/{run.id}/explain")
+        self.assertEqual(ok_resp.status_code, 200)
+        baseline_summary = ok_resp.json()["overall_summary"]
+
+        mock_post.side_effect = [
+            self._build_batch_response(recs[0:3], summary="Failed regen batch 1"),
+            mock_500,
+        ]
+        with patch.dict(os.environ, {**self.llm_env, "COMPANY_LLM_BATCH_SIZE": "3"}, clear=False):
+            regen_fail_resp = self.client.post(f"/analysis-runs/{run.id}/explain")
+        self.assertEqual(regen_fail_resp.status_code, 502)
+        preserved = self.client.get(f"/analysis-runs/{run.id}/explanation")
+        self.assertEqual(preserved.status_code, 200)
+        self.assertEqual(preserved.json()["overall_summary"], baseline_summary)
+
+    # Step 9 #10: Truncation metadata (finish_reason="length" and output_tokens >= max_tokens) handled clearly
+    @patch("requests.post")
+    def test_12_truncation_diagnostics_reported_clearly(self, mock_post):
+        run, _ = self._create_eight_rec_run()
+
+        # Truncated JSON with finish_reason="length"
+        mock_len = MagicMock(status_code=200)
+        mock_len.json.return_value = {
+            "choices": [
+                {"finish_reason": "length", "message": {"content": '{"overall_summary": "truncated mid json'}}
+            ],
+            "usage": {"input_tokens": 1100, "output_tokens": 1000},
+        }
+        mock_post.return_value = mock_len
+
+        with patch.dict(os.environ, {**self.llm_env, "COMPANY_LLM_BATCH_SIZE": "3"}, clear=False):
+            resp1 = self.client.post(f"/analysis-runs/{run.id}/explain")
+        self.assertEqual(resp1.status_code, 502)
+        detail1 = resp1.json()["detail"].lower()
+        self.assertIn("truncated", detail1)
+        self.assertIn("length", detail1)
+        self.assertIn("1000", detail1)
+        self.assertNotIn(self.llm_env["COMPANY_LLM_API_KEY"], resp1.text)
+
+        # Gateway reports finish_reason="stop" even when output_tokens hits max_tokens
+        mock_cap = MagicMock(status_code=200)
+        mock_cap.json.return_value = {
+            "choices": [
+                {"finish_reason": "stop", "message": {"content": '{"overall_summary": "cut at 1000'}}
+            ],
+            "usage": {"input_tokens": 1100, "output_tokens": 1000},
+        }
+        mock_post.return_value = mock_cap
+
+        with patch.dict(os.environ, {**self.llm_env, "COMPANY_LLM_BATCH_SIZE": "3"}, clear=False):
+            resp2 = self.client.post(f"/analysis-runs/{run.id}/explain")
+        self.assertEqual(resp2.status_code, 502)
+        self.assertIn("truncated", resp2.json()["detail"].lower())
+        self.assertIn("output_tokens=1000", resp2.json()["detail"])
+
+    # Step 9 #4, #12: Targeted retry recovers cleanly when missing ID is explained on retry, and rejects persistent omission
+    @patch("requests.post")
+    def test_13_missing_recommendation_retry_recovery_and_failure(self, mock_post):
+        run, recs = self._create_eight_rec_run()
+        # Use batch_size=3 -> Batch 1 has recs[0:3]; Batch 1 attempt 1 omits recs[2], retry recovers recs[2]!
+        partial_b1 = self._build_batch_response(recs[0:2], summary="Partial batch 1")
+        recovery_b1 = self._build_batch_response([recs[2]], summary="Recovered rec 3")
+        ok_b2 = self._build_batch_response(recs[3:6], summary="Batch 2 ok")
+        ok_b3 = self._build_batch_response(recs[6:8], summary="Batch 3 ok")
+
+        mock_post.side_effect = [partial_b1, recovery_b1, ok_b2, ok_b3]
+        with patch.dict(os.environ, {**self.llm_env, "COMPANY_LLM_BATCH_SIZE": "3"}, clear=False):
+            resp = self.client.post(f"/analysis-runs/{run.id}/explain")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(mock_post.call_count, 4)
+        self.assertEqual(
+            [r["recommendation_id"] for r in resp.json()["recommendations"]],
+            [r.id for r in recs],
+        )
+
+        # Retry prompt specifically targeted only the missing recommendation ID
+        retry_prompt = mock_post.call_args_list[1].kwargs["json"]["messages"][0]["content"]
+        self.assertIn(f'"recommendation_id":{recs[2].id}', retry_prompt)
+        self.assertNotIn(f'"recommendation_id":{recs[0].id}', retry_prompt)
+
+        # Unrecoverable omission on retry still fails strictly without saving
+        run2, recs2 = self._create_eight_rec_run()
+        mock_post.side_effect = [
+            self._build_batch_response(recs2[0:2], summary="Partial batch 1"),
+            self._build_batch_response(recs2[0:1], summary="Wrong retry response"),
+        ]
+        with patch.dict(os.environ, {**self.llm_env, "COMPANY_LLM_BATCH_SIZE": "3"}, clear=False):
+            fail_resp = self.client.post(f"/analysis-runs/{run2.id}/explain")
+        self.assertEqual(fail_resp.status_code, 502)
+        self.assertIn("omitted", fail_resp.json()["detail"].lower())
+        self.assertEqual(self.client.get(f"/analysis-runs/{run2.id}/explanation").status_code, 404)
+
+    # Verify prepare_batch_explanation_contexts isolation and scoped evidence per batch
+    def test_14_prepare_batch_explanation_contexts_scoping(self):
+        run, recs = self._create_eight_rec_run()
+        self.db.refresh(run)
+        prepared = prepare_batch_explanation_contexts(analysis_run=run, db=self.db, batch_size=3)
+
+        self.assertEqual(len(prepared["batches"]), 3)
+        self.assertEqual([len(b["recommendations"]) for b in prepared["batches"]], [3, 3, 2])
+        # Batch 2 only references module evidence -> supporting evidence must exclude executions/defects
+        b2_evidence = json.loads(prepared["batches"][1]["prompt_inputs"]["supporting_evidence_context_json"])
+        self.assertTrue(all(ev["source_type"] == "module" for ev in b2_evidence))
+        # Batch 3 only references defect evidence -> supporting evidence must exclude test_cases/executions
+        b3_evidence = json.loads(prepared["batches"][2]["prompt_inputs"]["supporting_evidence_context_json"])
+        self.assertTrue(all(ev["source_type"] == "defect" for ev in b3_evidence))
 
 
 if __name__ == "__main__":

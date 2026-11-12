@@ -77,7 +77,8 @@ class LLMSettings(BaseModel):
     company_llm_model_name: str = Field(default="")
     company_llm_temperature: float = Field(default=0.5, ge=0.0, le=2.0)
     company_llm_top_p: float = Field(default=0.9, gt=0.0, le=1.0)
-    company_llm_max_tokens: int = Field(default=1000, ge=1)
+    company_llm_max_tokens: int = Field(default=1000, ge=1, le=4096)
+    company_llm_batch_size: int = Field(default=3, ge=1, le=5)
     company_llm_timeout: int = Field(default=60, ge=1)
 
     @field_validator("company_llm_api_url", "company_llm_api_key", "company_llm_model_name", mode="before")
@@ -105,6 +106,7 @@ class LLMSettings(BaseModel):
             f"company_llm_temperature={self.company_llm_temperature}, "
             f"company_llm_top_p={self.company_llm_top_p}, "
             f"company_llm_max_tokens={self.company_llm_max_tokens}, "
+            f"company_llm_batch_size={self.company_llm_batch_size}, "
             f"company_llm_timeout={self.company_llm_timeout})"
         )
 
@@ -121,6 +123,7 @@ def get_llm_settings() -> LLMSettings:
         company_llm_temperature=_parse_float_env("COMPANY_LLM_TEMPERATURE", 0.5),
         company_llm_top_p=_parse_float_env("COMPANY_LLM_TOP_P", 0.9),
         company_llm_max_tokens=_parse_int_env("COMPANY_LLM_MAX_TOKENS", 1000),
+        company_llm_batch_size=_parse_int_env("COMPANY_LLM_BATCH_SIZE", 3),
         company_llm_timeout=_parse_int_env("COMPANY_LLM_TIMEOUT", 60),
     )
 

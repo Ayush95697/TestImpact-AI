@@ -36,3 +36,26 @@ class AnalysisRunDetailResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+class AnalysisRunSummaryResponse(BaseModel):
+    id: int
+    change_request_id: Optional[int] = None
+    change_request_title: Optional[str] = None
+    project_id: Optional[int] = None
+    project_name: Optional[str] = None
+    status: str
+    total_recommendations: int
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AnalysisRunListResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    items: List[AnalysisRunSummaryResponse]
+
+    model_config = ConfigDict(from_attributes=True)
+

@@ -6,6 +6,7 @@ from app.llm.explanation_service import (
     CompanyLLMOutputValidationError,
     generate_analysis_explanation,
     get_analysis_explanation,
+    prepare_batch_explanation_contexts,
     prepare_explanation_context,
     validate_llm_explanation,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "AnalysisExplanationNotFoundError",
     "AnalysisRunNotCompletedError",
     "prepare_explanation_context",
+    "prepare_batch_explanation_contexts",
     "validate_llm_explanation",
     "generate_analysis_explanation",
     "get_analysis_explanation",

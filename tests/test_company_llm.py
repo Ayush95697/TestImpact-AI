@@ -273,6 +273,57 @@ class TestCompanyLLM(unittest.TestCase):
             self.assertNotIn(self.secret_key, str(lazy_llm))
             self.assertNotIn("api_key", lazy_llm.model_dump())
             self.assertIn("...", repr(lazy_llm))
+            self.assertEqual(settings.company_llm_batch_size, 3)
+
+    # 12. Truncation metadata capture & configurable batch_size / bounded max_tokens
+    @patch("requests.post")
+    def test_12_truncation_metadata_and_config_bounds(self, mock_post):
+        # Case A: finish_reason="length"
+        mock_len = MagicMock(status_code=200)
+        mock_len.json.return_value = {
+            "choices": [{"finish_reason": "length", "message": {"content": '{"partial":'}}],
+            "usage": {"input_tokens": 900, "output_tokens": 1000},
+        }
+        mock_post.return_value = mock_len
+        out = self.llm.invoke("Test prompt")
+        self.assertEqual(out, '{"partial":')
+        self.assertTrue(self.llm.last_response_metadata["truncated"])
+        self.assertEqual(self.llm.last_response_metadata["finish_reason"], "length")
+        self.assertEqual(self.llm.last_response_metadata["output_tokens"], 1000)
+        diag = self.llm.get_truncation_diagnostic()
+        self.assertIsNotNone(diag)
+        self.assertIn("length", diag)
+        self.assertIn("1000", diag)
+
+        # Case B: gateway reports finish_reason="stop" even when output_tokens hits max_tokens
+        mock_cap = MagicMock(status_code=200)
+        mock_cap.json.return_value = {
+            "choices": [{"finish_reason": "stop", "message": {"content": '{"partial":'}}],
+            "usage": {"input_tokens": 1200, "output_tokens": 1000},
+        }
+        mock_post.return_value = mock_cap
+        self.llm.invoke("Test prompt")
+        self.assertTrue(self.llm.last_response_metadata["truncated"])
+        diag_cap = self.llm.get_truncation_diagnostic()
+        self.assertIsNotNone(diag_cap)
+        self.assertIn("output_tokens=1000", diag_cap)
+
+        # Config env overrides & bounds
+        with patch.dict(
+            os.environ,
+            {
+                "COMPANY_LLM_MAX_TOKENS": "1500",
+                "COMPANY_LLM_BATCH_SIZE": "2",
+            },
+            clear=False,
+        ):
+            cfg = get_llm_settings()
+            self.assertEqual(cfg.company_llm_max_tokens, 1500)
+            self.assertEqual(cfg.company_llm_batch_size, 2)
+
+        with patch.dict(os.environ, {"COMPANY_LLM_MAX_TOKENS": "999999"}, clear=False):
+            with self.assertRaises(Exception):
+                get_llm_settings()
 
 
 if __name__ == "__main__":

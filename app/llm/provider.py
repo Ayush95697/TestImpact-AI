@@ -48,8 +48,13 @@ class CompanyLLM(LLM):
     api_key: str = Field(default="", repr=False, exclude=True)
     temperature: float = Field(default=0.5, ge=0.0, le=2.0)
     top_p: float = Field(default=0.9, gt=0.0, le=1.0)
-    max_tokens: int = Field(default=1000, ge=1)
+    max_tokens: int = Field(default=1000, ge=1, le=4096)
     timeout: int = Field(default=60, ge=1)
+    last_response_metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        repr=False,
+        exclude=True,
+    )
 
     @field_validator("model", "endpoint_url", "api_key", mode="before")
     @classmethod
@@ -95,6 +100,23 @@ class CompanyLLM(LLM):
             return f"{self.api_key[:3]}...{self.api_key[-2:]}"
         return "***"
 
+    def get_truncation_diagnostic(self) -> Optional[str]:
+        """Returns a safe diagnostic string when completion metadata indicates output truncation."""
+        meta = self.last_response_metadata or {}
+        finish_reason = meta.get("finish_reason")
+        output_tokens = meta.get("output_tokens")
+        max_tokens = meta.get("max_tokens", self.max_tokens)
+        truncated = bool(meta.get("truncated"))
+
+        if truncated:
+            return (
+                f"LLM output truncated (finish_reason={finish_reason!r}, "
+                f"output_tokens={output_tokens}, max_tokens={max_tokens})"
+            )
+        if finish_reason and finish_reason != "stop":
+            return f"finish_reason={finish_reason!r}"
+        return None
+
     def _call(
         self,
         prompt: str,
@@ -108,6 +130,8 @@ class CompanyLLM(LLM):
 
         if not isinstance(prompt, str) or not prompt.strip():
             raise ValueError("Prompt must be a non-empty string")
+
+        self.last_response_metadata = {}
 
         headers = {
             "Content-Type": "application/json",
@@ -192,6 +216,43 @@ class CompanyLLM(LLM):
             raise CompanyLLMResponseError(
                 "Company LLM API response 'choices[0].message.content' must be a non-empty string"
             )
+
+        raw_finish_reason = first_choice.get("finish_reason")
+        finish_reason = (
+            raw_finish_reason.strip()
+            if isinstance(raw_finish_reason, str) and raw_finish_reason.strip()
+            else None
+        )
+
+        usage = data.get("usage")
+        input_tokens: Optional[int] = None
+        output_tokens: Optional[int] = None
+        if isinstance(usage, dict):
+            raw_in = (
+                usage.get("input_tokens")
+                if usage.get("input_tokens") is not None
+                else usage.get("prompt_tokens")
+            )
+            raw_out = (
+                usage.get("output_tokens")
+                if usage.get("output_tokens") is not None
+                else usage.get("completion_tokens")
+            )
+            if isinstance(raw_in, (int, float)) and not isinstance(raw_in, bool):
+                input_tokens = int(raw_in)
+            if isinstance(raw_out, (int, float)) and not isinstance(raw_out, bool):
+                output_tokens = int(raw_out)
+
+        truncated = (finish_reason == "length") or (
+            output_tokens is not None and output_tokens >= self.max_tokens
+        )
+        self.last_response_metadata = {
+            "finish_reason": finish_reason,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "max_tokens": self.max_tokens,
+            "truncated": truncated,
+        }
 
         return content
 

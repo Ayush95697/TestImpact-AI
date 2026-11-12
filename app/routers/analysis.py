@@ -1,4 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import date, datetime, time, timezone
+from typing import Dict, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -12,12 +16,15 @@ from app.llm.explanation_service import (
 from app.llm.provider import CompanyLLMError, CompanyLLMNotConfiguredError
 from app.models.analysis_run import AnalysisRun
 from app.models.change_request import ChangeRequest
+from app.models.project import Project
 from app.models.recommendation import Recommendation
 from app.rag.embeddings import CompanyEmbeddingError, CompanyEmbeddingNotConfiguredError
 from app.schemas.analysis import (
     AnalysisRequest,
     AnalysisResponse,
     AnalysisRunDetailResponse,
+    AnalysisRunListResponse,
+    AnalysisRunSummaryResponse,
 )
 from app.schemas.llm import AnalysisExplanationResponse
 from app.schemas.recommendation import (
@@ -77,6 +84,88 @@ def trigger_impact_analysis(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Impact analysis failed: {str(exc)}",
         )
+
+
+@router.get(
+    "/analysis-runs",
+    response_model=AnalysisRunListResponse,
+    status_code=status.HTTP_200_OK,
+    summary="List persisted analysis runs with optional filtering and pagination",
+)
+def list_analysis_runs(
+    project_id: Optional[int] = Query(None, ge=1, description="Filter analysis runs by project ID"),
+    change_request_id: Optional[int] = Query(None, ge=1, description="Filter analysis runs by change request ID"),
+    status_filter: Optional[str] = Query(None, alias="status", description="Filter by analysis status (running, completed, failed)"),
+    date_from: Optional[date] = Query(None, description="Inclusive start UTC date (YYYY-MM-DD)"),
+    date_to: Optional[date] = Query(None, description="Inclusive end UTC date (YYYY-MM-DD)"),
+    limit: int = Query(20, ge=1, le=100, description="Maximum number of analysis runs to return"),
+    offset: int = Query(0, ge=0, description="Number of analysis runs to skip"),
+    db: Session = Depends(get_db),
+) -> AnalysisRunListResponse:
+    """Returns paginated persisted analysis runs ordered newest-first."""
+    query = (
+        db.query(AnalysisRun, ChangeRequest, Project)
+        .outerjoin(ChangeRequest, AnalysisRun.change_request_id == ChangeRequest.id)
+        .outerjoin(Project, ChangeRequest.project_id == Project.id)
+    )
+
+    if project_id is not None:
+        query = query.filter(ChangeRequest.project_id == project_id)
+
+    if change_request_id is not None:
+        query = query.filter(AnalysisRun.change_request_id == change_request_id)
+
+    if status_filter is not None and status_filter.strip():
+        query = query.filter(AnalysisRun.status == status_filter.strip().lower())
+
+    if date_from is not None:
+        start_dt = datetime.combine(date_from, time.min, tzinfo=timezone.utc)
+        query = query.filter(AnalysisRun.created_at >= start_dt)
+
+    if date_to is not None:
+        end_dt = datetime.combine(date_to, time.max, tzinfo=timezone.utc)
+        query = query.filter(AnalysisRun.created_at <= end_dt)
+
+    total = query.count()
+    rows = (
+        query.order_by(AnalysisRun.created_at.desc(), AnalysisRun.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    run_ids = [run.id for run, _, _ in rows]
+    rec_counts_by_run: Dict[int, int] = {}
+    if run_ids:
+        rec_counts_by_run = dict(
+            db.query(Recommendation.analysis_run_id, func.count(Recommendation.id))
+            .filter(Recommendation.analysis_run_id.in_(run_ids))
+            .group_by(Recommendation.analysis_run_id)
+            .all()
+        )
+
+    items: List[AnalysisRunSummaryResponse] = []
+    for run, cr, project in rows:
+        items.append(
+            AnalysisRunSummaryResponse(
+                id=run.id,
+                change_request_id=run.change_request_id,
+                change_request_title=cr.title if cr else None,
+                project_id=cr.project_id if cr else None,
+                project_name=project.name if project else None,
+                status=run.status,
+                total_recommendations=int(rec_counts_by_run.get(run.id, 0)),
+                created_at=run.created_at,
+                completed_at=run.completed_at,
+            )
+        )
+
+    return AnalysisRunListResponse(
+        total=int(total),
+        limit=limit,
+        offset=offset,
+        items=items,
+    )
 
 
 @router.get(
