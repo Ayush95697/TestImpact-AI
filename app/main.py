@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from app.database import Base, engine
 # Import all models and associations so metadata registers all tables
 from app.models import (  # noqa: F401
+    AnalysisExplanation,
     AnalysisRun,
     ChangeRequest,
     Defect,

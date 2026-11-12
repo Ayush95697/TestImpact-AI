@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 if TYPE_CHECKING:
+    from app.models.analysis_explanation import AnalysisExplanation
     from app.models.change_request import ChangeRequest
     from app.models.recommendation import Recommendation
 
@@ -40,5 +41,11 @@ class AnalysisRun(Base):
         back_populates="analysis_run",
         cascade="all, delete-orphan",
         order_by="Recommendation.rank",
+    )
+    explanation: Mapped[Optional["AnalysisExplanation"]] = relationship(
+        "AnalysisExplanation",
+        back_populates="analysis_run",
+        uselist=False,
+        cascade="all, delete-orphan",
     )
 

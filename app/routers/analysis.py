@@ -2,6 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.llm.explanation_service import (
+    AnalysisExplanationNotFoundError,
+    AnalysisRunNotCompletedError,
+    AnalysisRunNotFoundError,
+    generate_analysis_explanation,
+    get_analysis_explanation,
+)
+from app.llm.provider import CompanyLLMError, CompanyLLMNotConfiguredError
 from app.models.analysis_run import AnalysisRun
 from app.models.change_request import ChangeRequest
 from app.models.recommendation import Recommendation
@@ -11,6 +19,7 @@ from app.schemas.analysis import (
     AnalysisResponse,
     AnalysisRunDetailResponse,
 )
+from app.schemas.llm import AnalysisExplanationResponse
 from app.schemas.recommendation import (
     RecommendationResponse,
     RecommendationReviewRequest,
@@ -159,4 +168,67 @@ def review_recommendation(
         ],
         review_status=rec.review_status,
     )
+
+
+@router.post(
+    "/analysis-runs/{analysis_run_id}/explain",
+    response_model=AnalysisExplanationResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Generate an evidence-grounded LLM explanation for an existing analysis run",
+)
+def explain_analysis_run(
+    analysis_run_id: int,
+    db: Session = Depends(get_db),
+) -> AnalysisExplanationResponse:
+    """Generates and persists a Company LLM explanation for existing deterministic recommendations.
+
+    Does not modify recommendation scores, ranks, impact levels, supporting evidence, or review status.
+    """
+    try:
+        return generate_analysis_explanation(analysis_run_id=analysis_run_id, db=db)
+    except AnalysisRunNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        )
+    except CompanyLLMNotConfiguredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        )
+    except AnalysisRunNotCompletedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        )
+    except CompanyLLMError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Company LLM provider error: {str(exc)}",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate analysis explanation: {str(exc)}",
+        )
+
+
+@router.get(
+    "/analysis-runs/{analysis_run_id}/explanation",
+    response_model=AnalysisExplanationResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Retrieve the persisted LLM explanation for an analysis run",
+)
+def get_analysis_run_explanation(
+    analysis_run_id: int,
+    db: Session = Depends(get_db),
+) -> AnalysisExplanationResponse:
+    """Returns the previously persisted LLM explanation for an analysis run."""
+    try:
+        return get_analysis_explanation(analysis_run_id=analysis_run_id, db=db)
+    except (AnalysisRunNotFoundError, AnalysisExplanationNotFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        )
 

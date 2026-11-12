@@ -9,6 +9,12 @@ from app.schemas.change_request import (
     ChangeRequestUpdate,
 )
 from app.schemas.defect import DefectCreate, DefectResponse, DefectUpdate
+from app.schemas.llm import (
+    AnalysisExplanationResponse,
+    EvidenceReference,
+    LLMExplanationPayload,
+    RecommendationExplanation,
+)
 from app.schemas.module import ModuleCreate, ModuleResponse, ModuleUpdate
 from app.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
 from app.schemas.rag import (
@@ -55,4 +61,8 @@ __all__ = [
     "SupportingEvidence",
     "RecommendationResponse",
     "RecommendationReviewRequest",
+    "EvidenceReference",
+    "RecommendationExplanation",
+    "LLMExplanationPayload",
+    "AnalysisExplanationResponse",
 ]
