@@ -12,9 +12,14 @@ from app.models import (  # noqa: F401
     AnalysisRun,
     ChangeRequest,
     Defect,
+    FileChange,
+    GitHubAnalysisJob,
+    GitHubCommit,
     Module,
+    PullRequest,
     Project,
     Recommendation,
+    Repository,
     TestCase,
     TestExecution,
     change_request_modules,
@@ -24,6 +29,7 @@ from app.routers import (
     analysis_router,
     change_requests_router,
     defects_router,
+    github_router,
     modules_router,
     projects_router,
     rag_router,
@@ -72,6 +78,7 @@ app.include_router(projects_router)
 app.include_router(modules_router)
 app.include_router(test_cases_router)
 app.include_router(defects_router)
+app.include_router(github_router)
 app.include_router(test_executions_router)
 app.include_router(change_requests_router)
 app.include_router(rag_router)

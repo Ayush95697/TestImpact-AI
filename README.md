@@ -103,12 +103,15 @@ testimpact-ai/
 │   │   ├── defect.py
 │   │   ├── test_execution.py
 │   │   ├── change_request.py
+│   │   ├── github.py                   # Registered repositories and imported PR data
+│   │   ├── github_associations.py      # Pull request to commit relationship
 │   │   ├── analysis_run.py
 │   │   ├── recommendation.py
 │   │   └── analysis_explanation.py     # Persisted optional LLaMA 3.1 8B explanations
 │   ├── schemas/                        # Pydantic v2 request/response contracts
 │   │   ├── analysis.py
 │   │   ├── change_request.py
+│   │   ├── github.py                   # GitHub integration request/response contracts
 │   │   ├── defect.py
 │   │   ├── llm.py
 │   │   ├── module.py
@@ -125,6 +128,7 @@ testimpact-ai/
 │   │   ├── defects.py
 │   │   ├── test_executions.py
 │   │   ├── change_requests.py
+│   │   ├── github.py                   # Repository registration and PR import endpoints
 │   │   ├── rag.py
 │   │   ├── analysis.py                 # Analyze, list runs, review, optional explain
 │   │   └── system.py                   # /system/capabilities & /dashboard/summary
@@ -142,7 +146,8 @@ testimpact-ai/
 │   │   └── explanation_service.py      # Strict grounding validation & DB persistence
 │   └── services/                       # Deterministic multi-signal impact engine
 │       ├── recommendation_engine.py
-│       └── impact_analysis.py
+│       ├── impact_analysis.py
+│       └── github_service.py            # GitHub PR, commit, file & diff retrieval
 ├── frontend/                           # Standalone React + Vite + TypeScript frontend
 │   ├── .env.example
 │   ├── index.html
@@ -170,6 +175,43 @@ testimpact-ai/
 ├── run_server.bat                      # Windows launcher (starts Backend + Frontend together)
 └── README.md
 ```
+
+---
+
+## GitHub Pull Request Import
+
+The backend can register GitHub Cloud or GitHub Enterprise repositories, verify the configured GitHub token, and import pull requests for downstream AST analysis. The GitHub token is read from the backend environment and is never returned by the API or stored in the database.
+
+1. Create a GitHub token with read access to the target repository's pull requests and contents. Store it in the backend `.env` file as `GITHUB_TOKEN`; optionally set `GITHUB_API_TIMEOUT_SECONDS` (default `20`). Never commit the `.env` file or token.
+2. Register the repository:
+
+   ```http
+   POST /repositories
+   Content-Type: application/json
+
+   {
+     "owner": "TestImpactAI",
+     "name": "enterprise-app",
+     "url": "https://github.com/TestImpactAI/enterprise-app",
+     "default_branch": "main",
+     "provider": "github_cloud"
+   }
+   ```
+
+   Use `"provider": "github_enterprise"` and the repository's Enterprise web URL for GitHub Enterprise. The service uses that host's `/api/v3` endpoint.
+3. Verify authentication with `GET /github/connection`. For Enterprise repositories, pass the registered `owner/name`, for example `GET /github/connection?repository=TestImpactAI/enterprise-app`.
+4. Import a pull request with `POST /analyze-pr`:
+
+   ```json
+   {
+     "repository": "TestImpactAI/enterprise-app",
+     "pr_number": 27
+   }
+   ```
+
+   The synchronous import retrieves the PR metadata, all paginated commits and changed files, and the complete PR diff; it stores them and returns an `analysis_job_id` with status `READY_FOR_AST_ANALYSIS`. The import is safe to repeat: existing PR details, commits, and file changes are refreshed rather than duplicated. Use `GET /repositories/{repository_id}/pull-requests/{pr_number}` to retrieve the stored metadata, diff, file change categories, and commit SHAs.
+
+GitHub API errors are reported as appropriate HTTP errors for invalid credentials, insufficient access, missing repositories/PRs, rate limits, and network failures. The token must have access to each private repository being imported.
 
 ---
 
