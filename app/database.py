@@ -2,7 +2,7 @@ from typing import Generator
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./testimpact.db"
+SQLALCHEMY_DATABASE_URL = "sqlite:///./tests/testimpact.db"
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,

@@ -10,6 +10,7 @@ import { ChangeRequestsPage } from './pages/ChangeRequestsPage';
 import { ImpactAnalysisPage } from './pages/ImpactAnalysisPage';
 import { AnalysisHistoryPage } from './pages/AnalysisHistoryPage';
 import { AboutPage } from './pages/AboutPage';
+import { GitHubIntegrationPage } from './pages/GitHubIntegrationPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,6 +35,7 @@ export const App: React.FC = () => {
                 <Route path="/impact-analysis" element={<ImpactAnalysisPage />} />
                 <Route path="/impact-analysis/:runId" element={<ImpactAnalysisPage />} />
                 <Route path="/analysis-history" element={<AnalysisHistoryPage />} />
+                <Route path="/github" element={<GitHubIntegrationPage />} />
                 <Route path="/about" element={<AboutPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

@@ -75,13 +75,13 @@ export function parseApiError(error: unknown): ApiError {
           detailMessage = 'Invalid request data provided.';
           break;
         case 401:
-          detailMessage = 'Authentication with the backend service failed (HTTP 401).';
+          detailMessage = 'GitHub rejected the backend credentials. Verify that GITHUB_TOKEN is valid.';
           break;
         case 403:
-          detailMessage = 'Permission denied for the requested operation (HTTP 403).';
+          detailMessage = 'GitHub access was denied. Check token permissions and organization approval.';
           break;
         case 404:
-          detailMessage = 'Requested resource was not found.';
+          detailMessage = 'The repository or pull request could not be found, or the configured GitHub token cannot access it.';
           break;
         case 409:
           detailMessage = 'Operation conflicts with existing records or constraints.';

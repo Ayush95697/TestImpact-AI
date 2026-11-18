@@ -5,6 +5,7 @@ import {
   ChevronRight,
   FolderKanban,
   GitPullRequest,
+  Github,
   History,
   Info,
   LayoutDashboard,
@@ -28,6 +29,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/projects', label: 'Projects', icon: FolderKanban },
   { to: '/change-requests', label: 'Change Requests', icon: GitPullRequest },
+  { to: '/github', label: 'GitHub Integration', icon: Github, matchPrefix: '/github' },
   { to: '/impact-analysis', label: 'Impact Analysis', icon: Activity, matchPrefix: '/impact-analysis' },
   { to: '/analysis-history', label: 'Analysis History', icon: History },
   { to: '/about', label: 'About', icon: Info },
@@ -44,6 +46,7 @@ function getRouteMeta(pathname: string): RouteMeta {
   if (pathname.startsWith('/change-requests')) return { title: 'Change Requests', section: 'Analysis Input' };
   if (pathname.startsWith('/impact-analysis')) return { title: 'Impact Analysis', section: 'Core Workspace' };
   if (pathname.startsWith('/analysis-history')) return { title: 'Analysis History', section: 'Audit Trail' };
+  if (pathname.startsWith('/github')) return { title: 'GitHub Integration', section: 'Repository Input' };
   if (pathname.startsWith('/about')) return { title: 'About TestImpact AI', section: 'Documentation' };
   return { title: 'TestImpact AI', section: 'Platform' };
 }

@@ -260,3 +260,65 @@ export interface IndexResponse {
   status: string;
 }
 
+export interface RepositoryCreate {
+  owner: string;
+  name: string;
+  url: string;
+  default_branch: string;
+  provider: 'github_cloud' | 'github_enterprise';
+}
+
+export interface Repository {
+  id: number;
+  name: string;
+  owner: string;
+  full_name: string;
+  url: string;
+  default_branch: string;
+  provider: string;
+  created_at: string;
+}
+
+export interface GitHubConnectionResponse {
+  connected: boolean;
+  login: string;
+  provider: string;
+}
+
+export interface AnalyzePullRequestRequest {
+  repository: string;
+  pr_number: number;
+}
+
+export interface AnalyzePullRequestResponse {
+  repository: string;
+  pr_number: number;
+  analysis_job_id: string;
+  changed_files: string[];
+  commits: string[];
+  status: 'READY_FOR_AST_ANALYSIS';
+}
+
+export interface ImportedChangedFile {
+  file_path: string;
+  previous_filename: string | null;
+  change_type: string;
+  lines_added: number;
+  lines_deleted: number;
+}
+
+export interface ImportedPullRequest {
+  pr_number: number;
+  title: string;
+  description: string | null;
+  author: string | null;
+  status: string;
+  base_branch: string;
+  head_branch: string;
+  created_at: string;
+  merged_at: string | null;
+  diff: string;
+  changed_files: ImportedChangedFile[];
+  commits: string[];
+}
+
